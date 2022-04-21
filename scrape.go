@@ -2,18 +2,19 @@ package main
 
 import (
 	"fmt"
+	"regexp"
 	"strings"
 
 	"github.com/gocolly/colly"
 )
 
 type School struct {
-	CdsCode       string
-	County        string
-	Name          string
-	Website       string
-	DirectoryLink string
-	CdsLink       string
+	CdsCode        string
+	County         string
+	Name           string
+	Website        string
+	DirectoryLinks []string
+	CdsLink        string
 }
 
 func main() {
@@ -29,7 +30,7 @@ func getDetailLinks() []string {
 	// Instantiate default collector
 	c := colly.NewCollector()
 
-	// On every a element which has href attribute call callback
+	// Get the school's cde.ca.gov detail page
 	c.OnHTML("td:nth-child(4) > a", func(e *colly.HTMLElement) {
 		link := "https://www.cde.ca.gov" + e.Attr("href")
 
@@ -78,6 +79,7 @@ func getSchoolDetailPages(detailLinks []string) []School {
 		fmt.Printf("Name found: %q\n", name)
 		// Set school name
 		school.Name = name
+		school.DirectoryLinks = make([]string, 0)
 	})
 
 	// Get school CDS code
@@ -120,12 +122,36 @@ func getSchoolDetailPages(detailLinks []string) []School {
 }
 
 func getSchoolDirectoryLinks(schoolData []School) []School {
-	var updatedSchools = make([]School, 0)
+	var updatedSchools = schoolData
+	var currentSchool = 0
 	c := colly.NewCollector()
 
-	//
+	// Get school website link
+	c.OnHTML("a[href]", func(e *colly.HTMLElement) {
+		link := e.Attr("href")
 
-	for _, school := range schoolData {
+		// Check if link text matches our expression
+		re := regexp.MustCompile("(?i)directory")
+		matched := re.MatchString(e.Text)
+
+		if matched {
+			// If matched then print link
+			fmt.Printf("Possible directory found: %q -> %s\n", e.Text, link)
+			// Add to list of possible directories
+			updatedSchools[currentSchool].DirectoryLinks = append(updatedSchools[currentSchool].DirectoryLinks, link)
+		}
+	})
+
+	c.OnRequest(func(r *colly.Request) {
+		fmt.Println("Visiting", r.URL.String())
+	})
+
+	c.OnScraped(func(r *colly.Response) {
+		fmt.Println("\nFinished \n\n", r.Request.URL)
+	})
+
+	for index, school := range schoolData {
+		currentSchool = index
 		c.Visit(school.Website)
 	}
 
