@@ -22,14 +22,11 @@ type School struct {
 // 19 SF HS: https://www.cde.ca.gov/SchoolDirectory/Results?Title=California%20School%20Directory&search=1&city=San%20Francisco&status=1%2C2&types=66&nps=0&multilingual=0&charter=0&magnet=0&yearround=0&qdc=0&qsc=0&Tab=1&Order=0&Page=0&Items=0&HideCriteria=False&isStaticReport=False
 func main() {
 	// Every HS in CA
-	// entryLinks := []string{
-	// 	"https://www.cde.ca.gov/SchoolDirectory/Results?title=California%20School%20Directory&search=0&status=1%2C2&types=80%2C66%2C67&nps=0&multilingual=0&charter=0&magnet=0&yearround=0&qdc=0&qsc=0&tab=1&order=0&page=0&items=500&hidecriteria=False&isstaticreport=False",
-	// 	"https://www.cde.ca.gov/SchoolDirectory/Results?title=California%20School%20Directory&search=0&status=1%2C2&types=80%2C66%2C67&nps=0&multilingual=0&charter=0&magnet=0&yearround=0&qdc=0&qsc=0&tab=1&order=0&page=1&items=500&hidecriteria=False&isstaticreport=False",
-	// 	"https://www.cde.ca.gov/SchoolDirectory/Results?title=California%20School%20Directory&search=0&status=1%2C2&types=80%2C66%2C67&nps=0&multilingual=0&charter=0&magnet=0&yearround=0&qdc=0&qsc=0&tab=1&order=0&page=2&items=500&hidecriteria=False&isstaticreport=False",
-	// 	"https://www.cde.ca.gov/SchoolDirectory/Results?title=California%20School%20Directory&search=0&status=1%2C2&types=80%2C66%2C67&nps=0&multilingual=0&charter=0&magnet=0&yearround=0&qdc=0&qsc=0&tab=1&order=0&page=3&items=500&hidecriteria=False&isstaticreport=False",
-	// }
 	entryLinks := []string{
-		"https://www.cde.ca.gov/SchoolDirectory/Results?title=California%20School%20Directory&search=0&status=1%2C2&types=80%2C66%2C67&nps=0&multilingual=0&charter=0&magnet=0&yearround=0&qdc=0&qsc=0&tab=1&order=0&page=0&items=100&hidecriteria=False&isstaticreport=False",
+		"https://www.cde.ca.gov/SchoolDirectory/Results?title=California%20School%20Directory&search=0&status=1%2C2&types=80%2C66%2C67&nps=0&multilingual=0&charter=0&magnet=0&yearround=0&qdc=0&qsc=0&tab=1&order=0&page=0&items=500&hidecriteria=False&isstaticreport=False",
+		"https://www.cde.ca.gov/SchoolDirectory/Results?title=California%20School%20Directory&search=0&status=1%2C2&types=80%2C66%2C67&nps=0&multilingual=0&charter=0&magnet=0&yearround=0&qdc=0&qsc=0&tab=1&order=0&page=1&items=500&hidecriteria=False&isstaticreport=False",
+		"https://www.cde.ca.gov/SchoolDirectory/Results?title=California%20School%20Directory&search=0&status=1%2C2&types=80%2C66%2C67&nps=0&multilingual=0&charter=0&magnet=0&yearround=0&qdc=0&qsc=0&tab=1&order=0&page=2&items=500&hidecriteria=False&isstaticreport=False",
+		"https://www.cde.ca.gov/SchoolDirectory/Results?title=California%20School%20Directory&search=0&status=1%2C2&types=80%2C66%2C67&nps=0&multilingual=0&charter=0&magnet=0&yearround=0&qdc=0&qsc=0&tab=1&order=0&page=3&items=500&hidecriteria=False&isstaticreport=False",
 	}
 
 	detailLinks := getDetailLinks(entryLinks)
@@ -38,11 +35,11 @@ func main() {
 
 	fmt.Println(schoolsWithDirectories)
 
-	writeResultsToJsonFile(allSchools)
-	writeResultsToJsonFile(schoolsWithDirectories)
+	writeResultsToJsonFile(allSchools, "all_results.json")
+	writeResultsToJsonFile(schoolsWithDirectories, "directory_results.json")
 }
 
-func writeResultsToJsonFile(schoolData []School) {
+func writeResultsToJsonFile(schoolData []School, fileName string) {
 	dataJson, err := json.Marshal(schoolData)
 	if err != nil {
 		panic(err)
@@ -53,7 +50,7 @@ func writeResultsToJsonFile(schoolData []School) {
 	// Although this is considerably slow, json.Marshal doesnt offer a way to turn off htmlEncoding
 	// Read More: https://github.com/golang/go/issues/8592
 
-	ioutil.WriteFile("directory_results.json", []byte(dataJsonString), 0644)
+	ioutil.WriteFile(fileName, []byte(dataJsonString), 0644)
 }
 
 func getDetailLinks(linksToVisit []string) []string {
@@ -175,7 +172,7 @@ func getSchoolDirectoryLinks(schoolData []School) ([]School, []School) {
 
 			// If the link doesnt start with http then prefix it with the base url
 			// (directory links should not be partial: ex: /apps/staff -> foo.com/apps/staff)
-			if string(link[0:4]) != "http" {
+			if len(link) >= 4 && string(link[0:4]) != "http" {
 				// get the base website url
 				website := allSchools[currentSchool].Website
 
