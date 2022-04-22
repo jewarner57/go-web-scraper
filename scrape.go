@@ -19,23 +19,44 @@ type School struct {
 	CdsLink        string
 }
 
+// 19 SF HS: https://www.cde.ca.gov/SchoolDirectory/Results?Title=California%20School%20Directory&search=1&city=San%20Francisco&status=1%2C2&types=66&nps=0&multilingual=0&charter=0&magnet=0&yearround=0&qdc=0&qsc=0&Tab=1&Order=0&Page=0&Items=0&HideCriteria=False&isStaticReport=False
 func main() {
-	detailLinks := getDetailLinks()
+	// Every HS in CA
+	// entryLinks := []string{
+	// 	"https://www.cde.ca.gov/SchoolDirectory/Results?title=California%20School%20Directory&search=0&status=1%2C2&types=80%2C66%2C67&nps=0&multilingual=0&charter=0&magnet=0&yearround=0&qdc=0&qsc=0&tab=1&order=0&page=0&items=500&hidecriteria=False&isstaticreport=False",
+	// 	"https://www.cde.ca.gov/SchoolDirectory/Results?title=California%20School%20Directory&search=0&status=1%2C2&types=80%2C66%2C67&nps=0&multilingual=0&charter=0&magnet=0&yearround=0&qdc=0&qsc=0&tab=1&order=0&page=1&items=500&hidecriteria=False&isstaticreport=False",
+	// 	"https://www.cde.ca.gov/SchoolDirectory/Results?title=California%20School%20Directory&search=0&status=1%2C2&types=80%2C66%2C67&nps=0&multilingual=0&charter=0&magnet=0&yearround=0&qdc=0&qsc=0&tab=1&order=0&page=2&items=500&hidecriteria=False&isstaticreport=False",
+	// 	"https://www.cde.ca.gov/SchoolDirectory/Results?title=California%20School%20Directory&search=0&status=1%2C2&types=80%2C66%2C67&nps=0&multilingual=0&charter=0&magnet=0&yearround=0&qdc=0&qsc=0&tab=1&order=0&page=3&items=500&hidecriteria=False&isstaticreport=False",
+	// }
+	entryLinks := []string{
+		"https://www.cde.ca.gov/SchoolDirectory/Results?title=California%20School%20Directory&search=0&status=1%2C2&types=80%2C66%2C67&nps=0&multilingual=0&charter=0&magnet=0&yearround=0&qdc=0&qsc=0&tab=1&order=0&page=0&items=100&hidecriteria=False&isstaticreport=False",
+	}
+
+	detailLinks := getDetailLinks(entryLinks)
 	schoolData := getSchoolDetailPages(detailLinks)
-	schoolDirectoryLinks := getSchoolDirectoryLinks(schoolData)
-	writeResultsToFile(schoolDirectoryLinks)
+	allSchools, schoolsWithDirectories := getSchoolDirectoryLinks(schoolData)
+
+	fmt.Println(schoolsWithDirectories)
+
+	writeResultsToJsonFile(allSchools)
+	writeResultsToJsonFile(schoolsWithDirectories)
 }
 
-func writeResultsToFile(resultsArr []School) {
-	jsonRes, err := json.Marshal(resultsArr)
+func writeResultsToJsonFile(schoolData []School) {
+	dataJson, err := json.Marshal(schoolData)
 	if err != nil {
 		panic(err)
 	}
+	// We convert the dataJson to a string and then replace escaped & characters
+	// json.Marshal auto escapes html characters like <, >, & so we have to replace them
+	dataJsonString := strings.Replace(string(dataJson), "\\u0026", "&", -1)
+	// Although this is considerably slow, json.Marshal doesnt offer a way to turn off htmlEncoding
+	// Read More: https://github.com/golang/go/issues/8592
 
-	ioutil.WriteFile("results.json", jsonRes, 0644)
+	ioutil.WriteFile("directory_results.json", []byte(dataJsonString), 0644)
 }
 
-func getDetailLinks() []string {
+func getDetailLinks(linksToVisit []string) []string {
 	var detailLinks = make([]string, 0)
 
 	// Instantiate default collector
@@ -58,10 +79,12 @@ func getDetailLinks() []string {
 
 	// After a request print "Finished ..."
 	c.OnScraped(func(r *colly.Response) {
-		fmt.Println("\n\nFinished", r.Request.URL)
+		fmt.Print("Finished ", r.Request.URL, "\n\n")
 	})
 
-	c.Visit("https://www.cde.ca.gov/SchoolDirectory/Results?Title=California%20School%20Directory&search=1&city=San%20Francisco&status=1%2C2&types=66&nps=0&multilingual=0&charter=0&magnet=0&yearround=0&qdc=0&qsc=0&Tab=1&Order=0&Page=0&Items=0&HideCriteria=False&isStaticReport=False")
+	for _, link := range linksToVisit {
+		c.Visit(link)
+	}
 
 	return detailLinks
 }
@@ -122,7 +145,7 @@ func getSchoolDetailPages(detailLinks []string) []School {
 	c.OnScraped(func(r *colly.Response) {
 		// Append the new school data
 		SchoolList = append(SchoolList, school)
-		fmt.Println("\nFinished \n\n", r.Request.URL)
+		fmt.Print("Finished ", r.Request.URL, "\n\n")
 	})
 
 	for _, link := range detailLinks {
@@ -132,8 +155,9 @@ func getSchoolDetailPages(detailLinks []string) []School {
 	return SchoolList
 }
 
-func getSchoolDirectoryLinks(schoolData []School) []School {
-	var updatedSchools = schoolData
+func getSchoolDirectoryLinks(schoolData []School) ([]School, []School) {
+	var allSchools = schoolData
+	var schoolsWithDirectories = make([]School, 0)
 	var currentSchool = 0
 	c := colly.NewCollector()
 
@@ -148,8 +172,41 @@ func getSchoolDirectoryLinks(schoolData []School) []School {
 		if matched {
 			// If matched then print link
 			fmt.Printf("Possible directory found: %q -> %s\n", e.Text, link)
+
+			// If the link doesnt start with http then prefix it with the base url
+			// (directory links should not be partial: ex: /apps/staff -> foo.com/apps/staff)
+			if string(link[0:4]) != "http" {
+				// get the base website url
+				website := allSchools[currentSchool].Website
+
+				// remove website trailing slash
+				if string(website[len(website)-1]) == "/" {
+					website = string(website[0 : len(website)-1])
+				}
+				// remove link leading slash
+				if string(link[0]) == "/" {
+					link = string(link[1:])
+				}
+
+				link = website + "/" + link
+			}
+
+			// check if link already exists in dir links
+			// (dont allow duplicate links)
+			linkAlreadyAdded := false
+			for _, dirLink := range allSchools[currentSchool].DirectoryLinks {
+				if dirLink == link {
+					linkAlreadyAdded = true
+				}
+			}
+
 			// Add to list of possible directories
-			updatedSchools[currentSchool].DirectoryLinks = append(updatedSchools[currentSchool].DirectoryLinks, link)
+			if !linkAlreadyAdded {
+				allSchools[currentSchool].DirectoryLinks = append(allSchools[currentSchool].DirectoryLinks, link)
+				fmt.Printf("Link Saved\n\n")
+			} else {
+				fmt.Printf("Link Discarded (duplicate)\n\n")
+			}
 		}
 	})
 
@@ -158,7 +215,13 @@ func getSchoolDirectoryLinks(schoolData []School) []School {
 	})
 
 	c.OnScraped(func(r *colly.Response) {
-		fmt.Println("\nFinished \n\n", r.Request.URL)
+
+		// get this school only if possible directory links were found
+		if len(allSchools[currentSchool].DirectoryLinks) > 0 {
+			schoolsWithDirectories = append(schoolsWithDirectories, allSchools[currentSchool])
+		}
+
+		fmt.Print("Finished ", r.Request.URL, "\n\n")
 	})
 
 	for index, school := range schoolData {
@@ -166,5 +229,5 @@ func getSchoolDirectoryLinks(schoolData []School) []School {
 		c.Visit(school.Website)
 	}
 
-	return updatedSchools
+	return allSchools, schoolsWithDirectories
 }
