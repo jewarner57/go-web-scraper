@@ -1,7 +1,9 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
+	"io/ioutil"
 	"regexp"
 	"strings"
 
@@ -21,7 +23,16 @@ func main() {
 	detailLinks := getDetailLinks()
 	schoolData := getSchoolDetailPages(detailLinks)
 	schoolDirectoryLinks := getSchoolDirectoryLinks(schoolData)
-	fmt.Printf("\n\n\n %+v\n", schoolDirectoryLinks)
+	writeResultsToFile(schoolDirectoryLinks)
+}
+
+func writeResultsToFile(resultsArr []School) {
+	jsonRes, err := json.Marshal(resultsArr)
+	if err != nil {
+		panic(err)
+	}
+
+	ioutil.WriteFile("results.json", jsonRes, 0644)
 }
 
 func getDetailLinks() []string {
